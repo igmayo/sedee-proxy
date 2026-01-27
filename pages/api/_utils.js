@@ -1,20 +1,24 @@
 export function requireKey(req, res) {
-  const expected = (process.env.PROXY_KEY || "").trim();
-  if (!expected) return true; // no exige key si no hay PROXY_KEY
+  const expected = String(process.env.PROXY_KEY || "").trim();
 
-  const provided = (
-    req.headers["x-proxy-key"] ||
-    req.query.key ||
-    ""
-  ).toString().trim();
+  // Si no hay PROXY_KEY en Vercel, no exigimos key
+  if (!expected) return true;
+
+  const rawHeader = req.headers["x-proxy-key"];
+  const headerValue = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+
+  const provided = String(headerValue || req.query?.key || "").trim();
 
   if (provided !== expected) {
     res.status(401).json({
       error: "PROXY_KEY_INVALID",
-      hint: "Send x-proxy-key header or ?key=1234",
+      hint: "Send x-proxy-key header or ?key=....",
+      expectedLength: expected.length,
+      providedLength: provided.length,
     });
     return false;
   }
+
   return true;
 }
 
