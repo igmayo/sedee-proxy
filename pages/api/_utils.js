@@ -1,12 +1,21 @@
-export function requireKey(req) {
-  const expected = process.env.PROXY_KEY;
-  if (!expected) return;
-  const key = req.headers["x-proxy-key"] || req.query.key;
-  if (key !== expected) {
-    const err = new Error("Unauthorized");
-    err.statusCode = 401;
-    throw err;
+export function requireKey(req, res) {
+  const expected = (process.env.PROXY_KEY || "").trim();
+  if (!expected) return true; // no exige key si no hay PROXY_KEY
+
+  const provided = (
+    req.headers["x-proxy-key"] ||
+    req.query.key ||
+    ""
+  ).toString().trim();
+
+  if (provided !== expected) {
+    res.status(401).json({
+      error: "PROXY_KEY_INVALID",
+      hint: "Send x-proxy-key header or ?key=1234",
+    });
+    return false;
   }
+  return true;
 }
 
 function deepOmit(obj, keysToRemove = new Set(["password", "refreshToken"])) {
@@ -28,7 +37,7 @@ export function sanitizeJson(data) {
 }
 
 export async function forward(req, res, path) {
-  requireKey(req);
+  if (!requireKey(req, res)) return;
 
   const base = process.env.SEDEE_API_BASE || "https://api.sedee.io";
   const token = process.env.SEDEE_BEARER_TOKEN;
