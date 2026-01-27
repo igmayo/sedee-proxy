@@ -32,7 +32,7 @@ export async function forward(req, res, path) {
 
   const base = process.env.SEDEE_API_BASE || "https://api.sedee.io";
   const token = process.env.SEDEE_BEARER_TOKEN;
-
+const cleanToken = (token || "").trim().split(/\s+/)[0];
   if (!token) {
     return res.status(500).json({ error: "Missing SEDEE_BEARER_TOKEN env var" });
   }
@@ -46,7 +46,7 @@ export async function forward(req, res, path) {
   const upstream = await fetch(url.toString(), {
     method: "GET",
     headers: {
-      "Authorization": `Bearer ${token}`,
+      "Authorization": `Bearer ${cleanToken}`,
       "Accept": "application/json",
     },
   });
