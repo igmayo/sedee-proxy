@@ -1,5 +1,8 @@
 export function requireKey(req, res) {
-  const expected = String(process.env.PROXY_KEY || "").trim();
+   console.log("[DEBUG] PROXY_KEY env =", JSON.stringify(process.env.PROXY_KEY));
+  console.log("[DEBUG] provided header x-proxy-key =", JSON.stringify(req.headers["x-proxy-key"]));
+  console.log("[DEBUG] provided query key =", JSON.stringify(req.query?.key)); 
+const expected = String(process.env.PROXY_KEY || "").trim();
 
   // Si no hay PROXY_KEY en Vercel, no exigimos key
   if (!expected) return true;
