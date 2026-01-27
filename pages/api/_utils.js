@@ -39,8 +39,9 @@ export function sanitizeJson(data) {
 export async function forward(req, res, path) {
   if (!requireKey(req, res)) return;
 
-  const base = process.env.SEDEE_API_BASE || "https://api.sedee.io";
-  const token = process.env.SEDEE_BEARER_TOKEN;
+  const base = (process.env.SEDEE_API_BASE || "https://api.sedee.io").trim();
+const token = (process.env.SEDEE_BEARER_TOKEN || "").trim();
+
 const cleanToken = (token || "").trim().split(/\s+/)[0];
   if (!token) {
     return res.status(500).json({ error: "Missing SEDEE_BEARER_TOKEN env var" });
