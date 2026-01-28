@@ -71,6 +71,7 @@ async function getToken(force = false) {
 }
 
 export async function forward(req, res, path) {
+  if (!allowCors(req, res)) return;
   if (!requireKey(req, res)) return;
 
   const base = (process.env.SEDEE_API_BASE || "https://api.sedee.io").trim();
@@ -112,4 +113,16 @@ export async function forward(req, res, path) {
     try { return res.json(bodyText ? JSON.parse(bodyText) : {}); } catch {}
   }
   return res.send(bodyText);
+}
+export function allowCors(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-proxy-key");
+
+  if (req.method === "OPTIONS") {
+    res.status(200).end();
+    return false;
+  }
+
+  return true;
 }
