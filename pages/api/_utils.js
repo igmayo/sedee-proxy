@@ -126,3 +126,133 @@ export function allowCors(req, res) {
 
   return true;
 }
+
+/**
+ * Proxy completo para endpoints de chat que reenvía headers, cookies y body
+ */
+export async function forwardChat(req, res, upstreamPath) {
+  try {
+    // CORS
+    if (!allowCors(req, res)) return;
+
+    // Validar key
+    const expected = (process.env.PROXY_KEY || "1234").trim();
+    const provided = (
+      req.headers["x-proxy-key"] ||
+      req.query.key ||
+      ""
+    ).toString().trim();
+
+    if (provided !== expected) {
+      console.error(`[forwardChat] Invalid PROXY_KEY. Expected length: ${expected.length}, Provided length: ${provided.length}`);
+      return res.status(401).json({
+        error: "PROXY_KEY_INVALID",
+        hint: "Send x-proxy-key header or ?key=....",
+        expectedLength: expected.length,
+        providedLength: provided.length,
+      });
+    }
+
+    // Construir URL upstream
+    const base = (process.env.SEDEE_API_BASE || "https://api.sedee.io").trim();
+    const url = new URL(base + upstreamPath);
+
+    // Reenviar query params (menos key)
+    for (const [k, v] of Object.entries(req.query || {})) {
+      if (k === "key") continue;
+      if (v !== undefined) url.searchParams.set(k, String(v));
+    }
+
+    // Preparar headers
+    const headers = {
+      "Accept": "application/json",
+    };
+
+    // Reenviar Authorization header si existe
+    if (req.headers.authorization) {
+      headers["Authorization"] = req.headers.authorization;
+    }
+
+    // Reenviar Cookie header si existe
+    if (req.headers.cookie) {
+      headers["Cookie"] = req.headers.cookie;
+    }
+
+    // Preparar opciones de fetch
+    const fetchOptions = {
+      method: req.method,
+      headers,
+    };
+
+    // Reenviar body en POST/PUT/PATCH
+    if (["POST", "PUT", "PATCH"].includes(req.method)) {
+      if (req.body !== undefined && req.body !== null) {
+        if (typeof req.body === "string") {
+          fetchOptions.body = req.body;
+          // Si no hay Content-Type y el body es string, intentar detectar
+          if (!req.headers["content-type"]) {
+            headers["Content-Type"] = "text/plain";
+          } else {
+            headers["Content-Type"] = req.headers["content-type"];
+          }
+        } else if (Buffer.isBuffer(req.body)) {
+          fetchOptions.body = req.body;
+          if (!req.headers["content-type"]) {
+            headers["Content-Type"] = "application/octet-stream";
+          } else {
+            headers["Content-Type"] = req.headers["content-type"];
+          }
+        } else {
+          // Objeto o array - serializar a JSON
+          fetchOptions.body = JSON.stringify(req.body);
+          headers["Content-Type"] = "application/json";
+        }
+      } else {
+        // Reenviar Content-Type si existe aunque no haya body
+        if (req.headers["content-type"]) {
+          headers["Content-Type"] = req.headers["content-type"];
+        }
+      }
+    } else {
+      // Para GET, reenviar Content-Type si existe
+      if (req.headers["content-type"]) {
+        headers["Content-Type"] = req.headers["content-type"];
+      }
+    }
+
+    console.error(`[forwardChat] Forwarding ${req.method} ${upstreamPath} to ${url.toString()}`);
+
+    // Hacer la petición upstream
+    const upstream = await fetch(url.toString(), fetchOptions);
+
+    // Leer el body
+    const bodyText = await upstream.text();
+
+    // Copiar headers relevantes si existen
+    const contentType = upstream.headers.get("content-type");
+    if (contentType) {
+      res.setHeader("Content-Type", contentType);
+    }
+
+    // Devolver exactamente el status code y body upstream
+    res.status(upstream.status);
+
+    // Intentar parsear JSON si aplica
+    if (contentType && contentType.includes("application/json")) {
+      try {
+        return res.json(bodyText ? JSON.parse(bodyText) : {});
+      } catch (e) {
+        console.error(`[forwardChat] Error parsing JSON response:`, e);
+        return res.send(bodyText);
+      }
+    }
+
+    return res.send(bodyText);
+  } catch (error) {
+    console.error(`[forwardChat] Error forwarding request:`, error);
+    return res.status(500).json({
+      error: "PROXY_ERROR",
+      message: error.message || "Internal proxy error",
+    });
+  }
+}
